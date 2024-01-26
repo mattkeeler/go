@@ -19,5 +19,4 @@ apt-get install -y \
 	supervisor \
 	nginx \
 	cron
-
 apt-get clean
