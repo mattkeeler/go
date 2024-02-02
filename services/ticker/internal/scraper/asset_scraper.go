@@ -314,8 +314,8 @@ func (c *ScraperConfig) parallelProcessAssets(assets []hProtocol.AssetStat, para
 }
 
 // retrieveAssets retrieves existing assets from the Horizon API. If limit=0, will fetch all assets.
-func (c *ScraperConfig) retrieveAssets(limit int) (assets []hProtocol.AssetStat, err error) {
-	r := horizonclient.AssetRequest{Limit: 200}
+func (c *ScraperConfig) retrieveAssets(limit int, issuer ...string) (assets []hProtocol.AssetStat, err error) {
+	r := horizonclient.AssetRequest{Limit: 200, ForAssetIssuer: issuer[0]}
 
 	assetsPage, err := c.Client.Assets(r)
 	if err != nil {

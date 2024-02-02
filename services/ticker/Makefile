@@ -6,6 +6,9 @@ TAG ?= stellar/ticker:$(shell git rev-parse --short HEAD)$(and $(shell git statu
 # https://github.com/opencontainers/image-spec/blob/master/annotations.md
 BUILD_DATE := $(shell date -u +%FT%TZ)
 
+build:
+	go build -o ticker .
+
 docker-build:
 	cd ../../ && \
 	$(SUDO) docker build --pull --label org.opencontainers.image.created="$(BUILD_DATE)" \

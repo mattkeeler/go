@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
+	"os"
 
 	"github.com/lib/pq"
 	"github.com/spf13/cobra"
@@ -15,6 +17,7 @@ var BackfillHours int
 func init() {
 	rootCmd.AddCommand(cmdIngest)
 	cmdIngest.AddCommand(cmdIngestAssets)
+	cmdIngest.AddCommand(cmdIngestFilteredAssets)
 	cmdIngest.AddCommand(cmdIngestTrades)
 	cmdIngest.AddCommand(cmdIngestOrderbooks)
 
@@ -30,6 +33,14 @@ func init() {
 		"num-hours",
 		7*24,
 		"Number of past hours to backfill trade data",
+	)
+
+	cmdIngestFilteredAssets.Flags().StringVarP(
+		&filePath,
+		"file",
+		"f",
+		"",
+		"Filter assets by issuers defined in a file",
 	)
 }
 
@@ -58,6 +69,43 @@ var cmdIngestAssets = &cobra.Command{
 		err = ticker.RefreshAssets(ctx, &session, Client, Logger)
 		if err != nil {
 			Logger.Fatal("could not refresh asset database:", err)
+		}
+	},
+}
+
+var cmdIngestFilteredAssets = &cobra.Command{
+	Use:   "filtered-assets",
+	Short: "Refreshes the asset database with new data retrieved from Horizon filtered by asset issuers defined in a file.",
+	Run: func(cmd *cobra.Command, args []string) {
+		if filePath == "" {
+			Logger.Fatal("file flag is required")
+		}
+
+		Logger.Info("Refreshing the asset database")
+		dbInfo, err := pq.ParseURL(DatabaseURL)
+		if err != nil {
+			Logger.Fatal("could not parse db-url:", err)
+		}
+
+		session, err := tickerdb.CreateSession("postgres", dbInfo)
+		if err != nil {
+			Logger.Fatal("could not connect to db:", err)
+		}
+		defer session.DB.Close()
+
+		issuers, err := getIssuers(filePath)
+		if err != nil {
+			Logger.Fatal("could not get issuers from file:", err)
+		}
+
+		ctx := context.Background()
+
+		// loop over the issuers and refresh the assets
+		for _, issuer := range issuers {
+			err = ticker.RefreshFilteredAssets(ctx, &session, Client, Logger, issuer)
+			if err != nil {
+				Logger.Fatal("could not refresh asset database:", err)
+			}
 		}
 	},
 }
@@ -120,4 +168,24 @@ var cmdIngestOrderbooks = &cobra.Command{
 			Logger.Fatal("could not refresh orderbook database:", err)
 		}
 	},
+}
+
+func getIssuers(filePath string) ([]string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	var issuers []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		issuers = append(issuers, scanner.Text())
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+
+	return issuers, nil
 }

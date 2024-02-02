@@ -14,6 +14,7 @@ var DatabaseURL string
 var Client *horizonclient.Client
 var UseTestNet bool
 var Logger = hlog.New()
+var filePath string
 
 var defaultDatabaseURL = getEnv("DB_URL", "postgres://localhost:5432/stellarticker01?sslmode=disable")
 

@@ -24,7 +24,8 @@ function main() {
 	start_postgres
 	migrate_db
 
-	populate_assets
+	#populate_assets
+	populate_filtered_assets
 	populate_trades
 	populate_orderbooks
 	generate_assets_file
@@ -41,15 +42,33 @@ function migrate_db() {
 	sudo -E -u stellar $STELLAR_BIN/ticker migrate
 }
 
-function populate_assets() {
+#function populate_assets() {
+#	if [ -f $PGHOME/.assets-populated ]; then
+#		echo "ticker: assets already pre-populated"
+#		return 0
+#	fi
+#	echo ""
+#	echo "Populating initial asset database"
+#	echo ""
+#	sudo -E -u stellar $STELLAR_BIN/ticker ingest assets
+#	touch $PGHOME/.assets-populated
+#}
+
+function populate_filtered_assets() {
 	if [ -f $PGHOME/.assets-populated ]; then
 		echo "ticker: assets already pre-populated"
 		return 0
 	fi
 	echo ""
-	echo "Populating initial asset database"
 	echo ""
-	sudo -E -u stellar $STELLAR_BIN/ticker ingest assets
+	echo ""
+	echo ""
+	echo "Populating database from filtered assets"
+	echo ""
+	echo ""
+	echo ""
+	echo ""
+	sudo -E -u stellar $STELLAR_BIN/ticker ingest filtered-assets -f ../issuers.txt
 	touch $PGHOME/.assets-populated
 }
 

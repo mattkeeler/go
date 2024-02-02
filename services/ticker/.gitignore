@@ -22,3 +22,5 @@ internal/docs/public
 /tls/*.csr
 
 docker/db
+ticker
+data

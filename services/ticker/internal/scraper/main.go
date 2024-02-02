@@ -128,6 +128,24 @@ func (c *ScraperConfig) ProcessAllAssets(limit int, parallelism int, assetQueue 
 	return
 }
 
+// ProcessAssets fetches assets from the Horizon public net. If limit = 0, will fetch all assets.
+func (c *ScraperConfig) ProcessAssets(limit int, issuer string, parallelism int, assetQueue chan<- FinalAsset) (numNonTrash int, numTrash int) {
+	dirtyAssets, err := c.retrieveAssets(limit, issuer)
+	if err != nil {
+		return
+	}
+
+	numNonTrash, numTrash = c.parallelProcessAssets(dirtyAssets, parallelism, assetQueue)
+
+	c.Logger.Infof(
+		"Scanned %d entries. Trash: %d. Non-trash: %d\n",
+		len(dirtyAssets),
+		numTrash,
+		numNonTrash,
+	)
+	return
+}
+
 // FetchAllTrades fetches all trades for a given period, respecting the limit. If limit = 0,
 // will fetch all trades for that given period.
 func (c *ScraperConfig) FetchAllTrades(since time.Time, limit int) (trades []hProtocol.Trade, err error) {

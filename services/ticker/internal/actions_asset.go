@@ -55,6 +55,47 @@ func RefreshAssets(ctx context.Context, s *tickerdb.TickerSession, c *horizoncli
 	return
 }
 
+// RefreshFilteredAssets scrapes the most recent asset list and ingests then into the db.
+func RefreshFilteredAssets(ctx context.Context, s *tickerdb.TickerSession, c *horizonclient.Client, l *hlog.Entry, issuer string) (err error) {
+	sc := scraper.ScraperConfig{
+		Client: c,
+		Logger: l,
+	}
+	var wg sync.WaitGroup
+	parallelism := 20
+	assetQueue := make(chan scraper.FinalAsset, parallelism)
+
+	go sc.ProcessAssets(0, issuer, parallelism, assetQueue)
+
+	wg.Add(1)
+	go func() {
+		count := 0
+		defer wg.Done()
+		for finalAsset := range assetQueue {
+			dbIssuer := tomlIssuerToDBIssuer(finalAsset.IssuerDetails)
+			if dbIssuer.PublicKey == "" {
+				dbIssuer.PublicKey = finalAsset.Issuer
+			}
+			issuerID, err := s.InsertOrUpdateIssuer(ctx, &dbIssuer, []string{"public_key"})
+			if err != nil {
+				l.Error("Error inserting issuer:", dbIssuer, err)
+				continue
+			}
+
+			dbAsset := finalAssetToDBAsset(finalAsset, issuerID)
+			err = s.InsertOrUpdateAsset(ctx, &dbAsset, []string{"code", "issuer_account", "issuer_id"})
+			if err != nil {
+				l.Error("Error inserting asset:", dbAsset, err)
+				continue
+			}
+			count += 1
+			l.Debugf("Assets added -- count: %d - issuer: %d, asset: %s", count, issuerID, dbAsset.Code)
+		}
+	}()
+	wg.Wait()
+	return
+}
+
 // GenerateAssetsFile generates a file with the info about all valid scraped Assets
 func GenerateAssetsFile(ctx context.Context, s *tickerdb.TickerSession, l *hlog.Entry, filename string) error {
 	l.Info("Retrieving asset data from db...")
