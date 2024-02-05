@@ -360,7 +360,7 @@ func (c *ScraperConfig) retrieveAssets(limit int) (assets []hProtocol.AssetStat,
 	return
 }
 
-// retrieveFilteredAssets retrieves existing assets from the Horizon API. If limit=0, will fetch all assets.
+// retrieveFilteredAssets retrieves assets filtered by issuer from the Horizon API.
 func (c *ScraperConfig) retrieveFilteredAssets(limit int, issuer ...string) (assets []hProtocol.AssetStat, err error) {
 	r := horizonclient.AssetRequest{Limit: 200, ForAssetIssuer: issuer[0]}
 
