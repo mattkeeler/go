@@ -314,8 +314,8 @@ func (c *ScraperConfig) parallelProcessAssets(assets []hProtocol.AssetStat, para
 }
 
 // retrieveAssets retrieves existing assets from the Horizon API. If limit=0, will fetch all assets.
-func (c *ScraperConfig) retrieveAssets(limit int, issuer ...string) (assets []hProtocol.AssetStat, err error) {
-	r := horizonclient.AssetRequest{Limit: 200, ForAssetIssuer: issuer[0]}
+func (c *ScraperConfig) retrieveAssets(limit int) (assets []hProtocol.AssetStat, err error) {
+	r := horizonclient.AssetRequest{Limit: 200}
 
 	assetsPage, err := c.Client.Assets(r)
 	if err != nil {
@@ -354,6 +354,53 @@ func (c *ScraperConfig) retrieveAssets(limit int, issuer ...string) (assets []hP
 		c.Logger.Debug("Cursor currently at:", n)
 
 		r = horizonclient.AssetRequest{Limit: 200, Cursor: n}
+	}
+
+	c.Logger.Infof("Fetched: %d assets\n", len(assets))
+	return
+}
+
+// retrieveFilteredAssets retrieves existing assets from the Horizon API. If limit=0, will fetch all assets.
+func (c *ScraperConfig) retrieveFilteredAssets(limit int, issuer ...string) (assets []hProtocol.AssetStat, err error) {
+	r := horizonclient.AssetRequest{Limit: 200, ForAssetIssuer: issuer[0]}
+
+	assetsPage, err := c.Client.Assets(r)
+	if err != nil {
+		return
+	}
+
+	c.Logger.Info("Fetching assets from Horizon")
+
+	for assetsPage.Links.Next.Href != assetsPage.Links.Self.Href {
+		err = utils.Retry(5, 5*time.Second, c.Logger, func() error {
+			assetsPage, err = c.Client.Assets(r)
+			if err != nil {
+				c.Logger.Info("Horizon rate limit reached!")
+			}
+			return err
+		})
+		if err != nil {
+			return
+		}
+		assets = append(assets, assetsPage.Embedded.Records...)
+
+		if limit != 0 { // for performance reasons, only perform these additional checks when limit != 0
+			numAssets := len(assets)
+			if numAssets >= limit {
+				diff := numAssets - limit
+				assets = assets[0 : numAssets-diff]
+				break
+			}
+		}
+
+		nextURL := assetsPage.Links.Next.Href
+		n, err := nextCursor(nextURL)
+		if err != nil {
+			return assets, err
+		}
+		c.Logger.Debug("Cursor currently at:", n)
+
+		r = horizonclient.AssetRequest{Limit: 200, Cursor: n, ForAssetIssuer: issuer[0]}
 	}
 
 	c.Logger.Infof("Fetched: %d assets\n", len(assets))

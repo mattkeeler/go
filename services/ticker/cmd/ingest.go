@@ -105,14 +105,11 @@ var cmdIngestFilteredAssets = &cobra.Command{
 
 		// loop over the issuers and refresh the assets
 		for _, issuer := range issuers {
-			Logger.Info("")
 			Logger.Infof("Refreshing assets for issuer: %s", issuer)
-			Logger.Info("")
 			err = ticker.RefreshFilteredAssets(ctx, &session, Client, Logger, issuer)
 			if err != nil {
 				Logger.Fatal("could not refresh asset database:", err)
 			}
-			Logger.Infof("Refreshed assets for issuer: %s", issuer)
 		}
 	},
 }

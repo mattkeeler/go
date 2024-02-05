@@ -130,7 +130,7 @@ func (c *ScraperConfig) ProcessAllAssets(limit int, parallelism int, assetQueue 
 
 // ProcessAssets fetches specified assets from the Horizon public net.
 func (c *ScraperConfig) ProcessAssets(limit int, issuer string, parallelism int, assetQueue chan<- FinalAsset) (numNonTrash int, numTrash int) {
-	dirtyAssets, err := c.retrieveAssets(limit, issuer)
+	dirtyAssets, err := c.retrieveFilteredAssets(limit, issuer)
 	if err != nil {
 		return
 	}
