@@ -42,17 +42,17 @@ function migrate_db() {
 	sudo -E -u stellar $STELLAR_BIN/ticker migrate
 }
 
-#function populate_assets() {
-#	if [ -f $PGHOME/.assets-populated ]; then
-#		echo "ticker: assets already pre-populated"
-#		return 0
-#	fi
-#	echo ""
-#	echo "Populating initial asset database"
-#	echo ""
-#	sudo -E -u stellar $STELLAR_BIN/ticker ingest assets
-#	touch $PGHOME/.assets-populated
-#}
+function populate_assets() {
+	if [ -f $PGHOME/.assets-populated ]; then
+		echo "ticker: assets already pre-populated"
+		return 0
+	fi
+	echo ""
+	echo "Populating initial asset database"
+	echo ""
+	sudo -E -u stellar $STELLAR_BIN/ticker ingest assets
+	touch $PGHOME/.assets-populated
+}
 
 function populate_filtered_assets() {
 	if [ -f $PGHOME/.assets-populated ]; then
@@ -60,16 +60,13 @@ function populate_filtered_assets() {
 		return 0
 	fi
 	echo ""
-	echo ""
-	echo ""
-	echo ""
 	echo "Populating database from filtered assets"
-	echo ""
-	echo ""
-	echo ""
 	echo ""
 	sudo -E -u stellar $STELLAR_BIN/ticker ingest filtered-assets -f ../issuers.txt
 	touch $PGHOME/.assets-populated
+	echo ""
+	echo "Finished populating database from filtered assets"
+	echo ""
 }
 
 function populate_trades() {

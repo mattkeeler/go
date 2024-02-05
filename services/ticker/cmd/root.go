@@ -48,7 +48,7 @@ func init() {
 		"use the Stellar Test Network, instead of the Stellar Public Network",
 	)
 
-	Logger.SetLevel(logrus.DebugLevel)
+	Logger.SetLevel(logrus.InfoLevel)
 }
 
 func initConfig() {

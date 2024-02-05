@@ -226,9 +226,9 @@ func processAsset(logger *hlog.Entry, asset hProtocol.AssetStat, tomlCache *TOML
 		var ok bool
 		issuer, ok = tomlCache.Get(tomlURL)
 		if ok {
-			logger.Info("Using cached TOML for asset")
+			logger.Debug("Using cached TOML for asset")
 		} else {
-			logger.Info("Fetching TOML for asset")
+			logger.Debug("Fetching TOML for asset")
 			tomlData, err := fetchTOMLData(tomlURL)
 			if err != nil {
 				errors = append(errors, err)
@@ -287,7 +287,7 @@ func (c *ScraperConfig) parallelProcessAssets(assets []hProtocol.AssetStat, para
 					WithField("asset_code", assets[j].Asset.Code).
 					WithField("asset_issuer", assets[j].Asset.Issuer)
 				if !shouldDiscardAsset(assets[j], shouldValidateTOML) {
-					c.Logger.Info("Processing asset")
+					c.Logger.Debug("Processing asset")
 					finalAsset, err := processAsset(logger, assets[j], tomlCache, shouldValidateTOML)
 					if err != nil {
 						mutex.Lock()
@@ -297,7 +297,7 @@ func (c *ScraperConfig) parallelProcessAssets(assets []hProtocol.AssetStat, para
 					}
 					assetQueue <- finalAsset
 				} else {
-					c.Logger.Info("Discarding asset")
+					c.Logger.Debug("Discarding asset")
 					mutex.Lock()
 					numTrash++
 					mutex.Unlock()

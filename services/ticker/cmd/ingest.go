@@ -93,19 +93,26 @@ var cmdIngestFilteredAssets = &cobra.Command{
 		}
 		defer session.DB.Close()
 
-		issuers, err := getIssuers(filePath)
+		fileContents, err := getIssuers(filePath)
 		if err != nil {
 			Logger.Fatal("could not get issuers from file:", err)
 		}
+
+		// deduplicate the file contents
+		issuers := removeDuplicate(fileContents)
 
 		ctx := context.Background()
 
 		// loop over the issuers and refresh the assets
 		for _, issuer := range issuers {
+			Logger.Info("")
+			Logger.Infof("Refreshing assets for issuer: %s", issuer)
+			Logger.Info("")
 			err = ticker.RefreshFilteredAssets(ctx, &session, Client, Logger, issuer)
 			if err != nil {
 				Logger.Fatal("could not refresh asset database:", err)
 			}
+			Logger.Infof("Refreshed assets for issuer: %s", issuer)
 		}
 	},
 }
@@ -188,4 +195,16 @@ func getIssuers(filePath string) ([]string, error) {
 	}
 
 	return issuers, nil
+}
+
+func removeDuplicate[T comparable](sliceList []T) []T {
+	allKeys := make(map[T]bool)
+	list := []T{}
+	for _, item := range sliceList {
+		if _, value := allKeys[item]; !value {
+			allKeys[item] = true
+			list = append(list, item)
+		}
+	}
+	return list
 }
