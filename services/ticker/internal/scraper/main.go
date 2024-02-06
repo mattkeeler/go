@@ -160,6 +160,20 @@ func (c *ScraperConfig) FetchAllTrades(since time.Time, limit int) (trades []hPr
 	return
 }
 
+// FetchFilteredTrades fetches all trades filtered by issuer for a given period, respecting the limit. If limit = 0,
+// will fetch all trades for that given period.
+func (c *ScraperConfig) FetchFilteredTrades(since time.Time, limit int, issuer string) (trades []hProtocol.Trade, err error) {
+	c.Logger.Info("Fetching trades from Horizon")
+
+	trades, err = c.retrieveFilteredTrades(since, limit, issuer)
+
+	if len(trades) > 0 {
+		c.Logger.Info("Last close time ingested:", trades[len(trades)-1].LedgerCloseTime)
+	}
+	c.Logger.Infof("Fetched: %d trades\n", len(trades))
+	return
+}
+
 // StreamNewTrades streams trades directly from horizon and calls the handler function
 // whenever a new trade appears.
 func (c *ScraperConfig) StreamNewTrades(cursor string, h horizonclient.TradeHandler) error {

@@ -78,6 +78,57 @@ func (c *ScraperConfig) retrieveTrades(since time.Time, limit int) (trades []hPr
 	return
 }
 
+// retrieveFilteredTrades retrieves trades by issuer from the Horizon API for the last timeDelta period.
+func (c *ScraperConfig) retrieveFilteredTrades(since time.Time, limit int, issuer string) (trades []hProtocol.Trade, err error) {
+	r := horizonclient.TradeRequest{Limit: 200, Order: horizonclient.OrderDesc, BaseAssetIssuer: issuer}
+
+	tradesPage, err := c.Client.Trades(r)
+	if err != nil {
+		return
+	}
+
+	for tradesPage.Links.Next.Href != tradesPage.Links.Self.Href {
+		// Enforcing time boundaries:
+		last, cleanTrades := c.checkRecords(tradesPage.Embedded.Records, since)
+		trades = append(trades, cleanTrades...)
+		if last {
+			break
+		}
+
+		// Enforcing limit of results:
+		if limit != 0 {
+			numTrades := len(trades)
+			if numTrades >= limit {
+				diff := numTrades - limit
+				trades = trades[0 : numTrades-diff]
+				break
+			}
+		}
+
+		// Finding next page's params:
+		nextURL := tradesPage.Links.Next.Href
+		n, err := nextCursor(nextURL)
+		if err != nil {
+			return trades, err
+		}
+		c.Logger.Debug("Cursor currently at:", n)
+		r.Cursor = n
+
+		err = utils.Retry(5, 5*time.Second, c.Logger, func() error {
+			tradesPage, err = c.Client.Trades(r)
+			if err != nil {
+				c.Logger.Info("Horizon rate limit reached!")
+			}
+			return err
+		})
+		if err != nil {
+			return trades, err
+		}
+	}
+
+	return
+}
+
 // streamTrades streams trades directly from horizon and calls the handler function
 // whenever a new trade appears.
 func (c *ScraperConfig) streamTrades(h horizonclient.TradeHandler, cursor string) error {

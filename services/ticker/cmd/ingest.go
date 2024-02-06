@@ -19,6 +19,7 @@ func init() {
 	cmdIngest.AddCommand(cmdIngestAssets)
 	cmdIngest.AddCommand(cmdIngestFilteredAssets)
 	cmdIngest.AddCommand(cmdIngestTrades)
+	cmdIngest.AddCommand(cmdIngestFilteredTrades)
 	cmdIngest.AddCommand(cmdIngestOrderbooks)
 
 	cmdIngestTrades.Flags().BoolVar(
@@ -41,6 +42,14 @@ func init() {
 		"f",
 		"",
 		"Filter assets by issuers defined in a file",
+	)
+
+	cmdIngestFilteredTrades.Flags().StringVarP(
+		&filePath,
+		"file",
+		"f",
+		"",
+		"Filter trades by issuers defined in a file",
 	)
 }
 
@@ -116,7 +125,7 @@ var cmdIngestFilteredAssets = &cobra.Command{
 
 var cmdIngestTrades = &cobra.Command{
 	Use:   "trades",
-	Short: "Fills the trade database with data retrieved form Horizon.",
+	Short: "Fills the trade database with data retrieved from Horizon.",
 	Run: func(cmd *cobra.Command, args []string) {
 		dbInfo, err := pq.ParseURL(DatabaseURL)
 		if err != nil {
@@ -139,6 +148,56 @@ var cmdIngestTrades = &cobra.Command{
 		err = ticker.BackfillTrades(ctx, &session, Client, Logger, BackfillHours, 0)
 		if err != nil {
 			Logger.Fatal("could not refresh trade database:", err)
+		}
+
+		if ShouldStream {
+			Logger.Info("Streaming new data (this is a continuous process)")
+			err = ticker.StreamTrades(ctx, &session, Client, Logger)
+			if err != nil {
+				Logger.Fatal("could not refresh trade database:", err)
+			}
+		}
+	},
+}
+
+var cmdIngestFilteredTrades = &cobra.Command{
+	Use:   "filtered-trades",
+	Short: "Fills the trade database with data retrieved from Horizon filtered by asset issuers defined in a file.",
+	Run: func(cmd *cobra.Command, args []string) {
+		dbInfo, err := pq.ParseURL(DatabaseURL)
+		if err != nil {
+			Logger.Fatal("could not parse db-url:", err)
+		}
+
+		session, err := tickerdb.CreateSession("postgres", dbInfo)
+		if err != nil {
+			Logger.Fatal("could not connect to db:", err)
+		}
+		defer session.DB.Close()
+
+		ctx := context.Background()
+		numDays := float32(BackfillHours) / 24.0
+		Logger.Infof(
+			"Backfilling Trade data for the past %d hour(s) [%.2f days]\n",
+			BackfillHours,
+			numDays,
+		)
+
+		fileContents, err := getIssuers(filePath)
+		if err != nil {
+			Logger.Fatal("could not get issuers from file:", err)
+		}
+
+		// deduplicate the file contents
+		issuers := removeDuplicate(fileContents)
+
+		// loop over the issuers and refresh the assets
+		for _, issuer := range issuers {
+			Logger.Infof("Refreshing trades for issuer: %s", issuer)
+			err = ticker.BackfillFilteredTrades(ctx, &session, Client, Logger, BackfillHours, 0, issuer)
+			if err != nil {
+				Logger.Fatal("could not refresh trade database:", err)
+			}
 		}
 
 		if ShouldStream {
