@@ -29,7 +29,7 @@ function main() {
 	populate_trades
 	populate_filtered_orderbooks
 	generate_assets_file
-	#generate_markets_file
+	generate_markets_file
 	generate_partial_markets_file
 
 	stop_postgres
@@ -63,7 +63,7 @@ function populate_filtered_assets() {
 	echo ""
 	echo "Populating database from filtered assets"
 	echo ""
-	sudo -E -u stellar $STELLAR_BIN/ticker ingest filtered-assets -f ../issuers.txt
+	sudo -E -u stellar $STELLAR_BIN/ticker ingest filtered-assets -f $CONF_HOME/issuers.txt
 	touch $PGHOME/.assets-populated
 	echo ""
 	echo "Finished populating database from filtered assets"
@@ -89,7 +89,7 @@ function populate_filtered_trades() {
 	echo ""
 	echo "Populating initial trade database from filtered issuers"
 	echo ""
-	sudo -E -u stellar $STELLAR_BIN/ticker ingest filtered-trades -f ../issuers.txt
+	sudo -E -u stellar $STELLAR_BIN/ticker ingest filtered-trades -f $CONF_HOME/issuers.txt
 	touch $PGHOME/.trades-populated
 }
 
@@ -113,7 +113,7 @@ function populate_filtered_orderbooks() {
 	echo ""
 	echo "Populating initial orderbook database from filtered issuers"
 	echo ""
-	sudo -E -u stellar $STELLAR_BIN/ticker ingest filtered-orderbooks -f ../issuers.txt
+	sudo -E -u stellar $STELLAR_BIN/ticker ingest filtered-orderbooks -f $CONF_HOME/issuers.txt
 	touch $PGHOME/.orderbooks-populated
 }
 
@@ -140,14 +140,14 @@ function generate_markets_file() {
 }
 
 function generate_partial_markets_file() {
-	if [ -f $STELLAR_HOME/www/markets.json ]; then
-		echo "ticker: markets.json already pre-populated"
+	if [ -f $STELLAR_HOME/www/partial-markets.json ]; then
+		echo "ticker: partial-markets.json already pre-populated"
 		return 0
 	fi
 	echo ""
-	echo "Creating markets.json file"
+	echo "Creating partial-markets.json file"
 	echo ""
-	sudo -E -u stellar $STELLAR_BIN/ticker generate partial-market-data -f ../issuers.txt -o $WWW_HOME/markets.json
+	sudo -E -u stellar $STELLAR_BIN/ticker generate partial-market-data -f $CONF_HOME/issuers.txt -o $WWW_HOME/partial-markets.json
 }
 
 # run_silent is a utility function that runs a command with an abbreviated
@@ -181,7 +181,9 @@ function set_db_url() {
 	PGPASS="stellar"
 	export DB_URL="postgres://stellar:${PGPASS}@127.0.0.1:5432/ticker"
 	echo "Setting db url: $DB_URL"
-	echo DB_URL="${DB_URL}" >>/etc/environment
+	#echo DB_URL="${DB_URL}" >>/etc/environment
+	export DB_URL="${DB_URL}"
+	echo DB_URL="${DB_URL}" >>~/.bashrc
 }
 
 function copy_pgpass() {

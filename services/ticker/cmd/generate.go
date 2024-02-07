@@ -30,7 +30,7 @@ func init() {
 		&MarketsOutFile,
 		"out-file",
 		"o",
-		"markets.json",
+		"partial-markets.json",
 		"Set the name of the output file",
 	)
 
@@ -104,7 +104,7 @@ var cmdGeneratePartialMarketData = &cobra.Command{
 		// deduplicate the file contents
 		issuers := removeDuplicate(fileContents)
 
-		Logger.Infof("Starting market data generation, outputting to: %s\n", MarketsOutFile)
+		Logger.Infof("Starting market data generation from filtered issuers, outputting to: %s\n", MarketsOutFile)
 		err = ticker.GeneratePartialMarketSummaryFile(&session, Logger, MarketsOutFile, issuers)
 		if err != nil {
 			Logger.Fatal("could not generate market data:", err)

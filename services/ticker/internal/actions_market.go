@@ -98,7 +98,7 @@ func dbMarketToMarketStats(m tickerdb.Market) MarketStats {
 // GenerateMarketSummaryFile generates a MarketSummary with the statistics for all
 // valid markets within the database and outputs it to <filename>.
 func GeneratePartialMarketSummaryFile(s *tickerdb.TickerSession, l *hlog.Entry, filename string, issuers []string) error {
-	l.Info("Generating market data...")
+	l.Info("Generating partial market data...")
 	marketSummary, err := GeneratePartialMarketSummary(s, issuers)
 	if err != nil {
 		return err
