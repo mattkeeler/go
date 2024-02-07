@@ -25,8 +25,9 @@ function main() {
 	migrate_db
 
 	populate_filtered_assets
-	populate_filtered_trades
-	populate_orderbooks
+	#populate_filtered_trades
+	populate_trades
+	populate_filtered_orderbooks
 	generate_assets_file
 	generate_markets_file
 
@@ -100,6 +101,18 @@ function populate_orderbooks() {
 	echo "Populating initial orderbook database"
 	echo ""
 	sudo -E -u stellar $STELLAR_BIN/ticker ingest orderbooks
+	touch $PGHOME/.orderbooks-populated
+}
+
+function populate_filtered_orderbooks() {
+	if [ -f $PGHOME/.orderbooks-populated ]; then
+		echo "ticker: orderbooks already pre-populated"
+		return 0
+	fi
+	echo ""
+	echo "Populating initial orderbook database from filtered issuers"
+	echo ""
+	sudo -E -u stellar $STELLAR_BIN/ticker ingest filtered-orderbooks -f ../issuers.txt
 	touch $PGHOME/.orderbooks-populated
 }
 

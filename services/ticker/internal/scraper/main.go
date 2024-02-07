@@ -163,7 +163,7 @@ func (c *ScraperConfig) FetchAllTrades(since time.Time, limit int) (trades []hPr
 // FetchFilteredTrades fetches all trades filtered by issuer for a given period, respecting the limit. If limit = 0,
 // will fetch all trades for that given period.
 func (c *ScraperConfig) FetchFilteredTrades(since time.Time, limit int, issuer string) (trades []hProtocol.Trade, err error) {
-	c.Logger.Info("Fetching trades from Horizon")
+	c.Logger.Infof("Fetching trades from Horizon for issuer: %s", issuer)
 
 	trades, err = c.retrieveFilteredTrades(since, limit, issuer)
 

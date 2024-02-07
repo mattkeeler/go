@@ -21,6 +21,7 @@ func init() {
 	cmdIngest.AddCommand(cmdIngestTrades)
 	cmdIngest.AddCommand(cmdIngestFilteredTrades)
 	cmdIngest.AddCommand(cmdIngestOrderbooks)
+	cmdIngest.AddCommand(cmdIngestFilteredOrderbooks)
 
 	cmdIngestTrades.Flags().BoolVar(
 		&ShouldStream,
@@ -50,6 +51,14 @@ func init() {
 		"f",
 		"",
 		"Filter trades by issuers defined in a file",
+	)
+
+	cmdIngestFilteredOrderbooks.Flags().StringVarP(
+		&filePath,
+		"file",
+		"f",
+		"",
+		"Filter orderbooks by issuers defined in a file",
 	)
 }
 
@@ -84,7 +93,7 @@ var cmdIngestAssets = &cobra.Command{
 
 var cmdIngestFilteredAssets = &cobra.Command{
 	Use:   "filtered-assets",
-	Short: "Refreshes the asset database with new data retrieved from Horizon filtered by asset issuers defined in a file.",
+	Short: "Refreshes the asset database with new data retrieved from Horizon filtered by issuers defined in a file.",
 	Run: func(cmd *cobra.Command, args []string) {
 		if filePath == "" {
 			Logger.Fatal("file flag is required")
@@ -162,8 +171,12 @@ var cmdIngestTrades = &cobra.Command{
 
 var cmdIngestFilteredTrades = &cobra.Command{
 	Use:   "filtered-trades",
-	Short: "Fills the trade database with data retrieved from Horizon filtered by asset issuers defined in a file.",
+	Short: "Fills the trade database with data retrieved from Horizon filtered by issuers defined in a file.",
 	Run: func(cmd *cobra.Command, args []string) {
+		if filePath == "" {
+			Logger.Fatal("file flag is required")
+		}
+
 		dbInfo, err := pq.ParseURL(DatabaseURL)
 		if err != nil {
 			Logger.Fatal("could not parse db-url:", err)
@@ -191,9 +204,8 @@ var cmdIngestFilteredTrades = &cobra.Command{
 		// deduplicate the file contents
 		issuers := removeDuplicate(fileContents)
 
-		// loop over the issuers and refresh the assets
+		// loop over the issuers and refresh the trades
 		for _, issuer := range issuers {
-			Logger.Infof("Refreshing trades for issuer: %s", issuer)
 			err = ticker.BackfillFilteredTrades(ctx, &session, Client, Logger, BackfillHours, 0, issuer)
 			if err != nil {
 				Logger.Fatal("could not refresh trade database:", err)
@@ -227,6 +239,41 @@ var cmdIngestOrderbooks = &cobra.Command{
 		defer session.DB.Close()
 
 		err = ticker.RefreshOrderbookEntries(&session, Client, Logger)
+		if err != nil {
+			Logger.Fatal("could not refresh orderbook database:", err)
+		}
+	},
+}
+
+var cmdIngestFilteredOrderbooks = &cobra.Command{
+	Use:   "filtered-orderbooks",
+	Short: "Refreshes the orderbook stats database with new data retrieved from Horizon filtered by issuers defined in a file.",
+	Run: func(cmd *cobra.Command, args []string) {
+		if filePath == "" {
+			Logger.Fatal("file flag is required")
+		}
+
+		Logger.Info("Refreshing the asset database")
+		dbInfo, err := pq.ParseURL(DatabaseURL)
+		if err != nil {
+			Logger.Fatal("could not parse db-url:", err)
+		}
+
+		session, err := tickerdb.CreateSession("postgres", dbInfo)
+		if err != nil {
+			Logger.Fatal("could not connect to db:", err)
+		}
+		defer session.DB.Close()
+
+		fileContents, err := getIssuers(filePath)
+		if err != nil {
+			Logger.Fatal("could not get issuers from file:", err)
+		}
+
+		// deduplicate the file contents
+		issuers := removeDuplicate(fileContents)
+
+		err = ticker.RefreshFilteredOrderbookEntries(&session, Client, Logger, issuers)
 		if err != nil {
 			Logger.Fatal("could not refresh orderbook database:", err)
 		}

@@ -50,6 +50,48 @@ func RefreshOrderbookEntries(s *tickerdb.TickerSession, c *horizonclient.Client,
 	return nil
 }
 
+// RefreshOrderbookEntries updates the orderbook entries for the relevant markets that were active
+// in the past 7-day interval
+func RefreshFilteredOrderbookEntries(s *tickerdb.TickerSession, c *horizonclient.Client, l *hlog.Entry, issuers []string) error {
+	sc := scraper.ScraperConfig{
+		Client: c,
+		Logger: l,
+	}
+	ctx := context.Background()
+
+	// Retrieve relevant markets for the past 7 days (168 hours):
+	mkts, err := s.Retrieve7DRelevantMarkets(ctx)
+	if err != nil {
+		return errors.Wrap(err, "could not retrieve partial markets")
+	}
+
+	for _, mkt := range mkts {
+		for _, issuer := range issuers {
+			if mkt.BaseAssetIssuer == issuer {
+				ob, err := sc.FetchOrderbookForAssets(
+					mkt.BaseAssetType,
+					mkt.BaseAssetCode,
+					mkt.BaseAssetIssuer,
+					mkt.CounterAssetType,
+					mkt.CounterAssetCode,
+					mkt.CounterAssetIssuer,
+				)
+				if err != nil {
+					l.Error(errors.Wrap(err, "could not fetch orderbook for assets"))
+					continue
+				}
+				dbOS := orderbookStatsToDBOrderbookStats(ob, mkt.BaseAssetID, mkt.CounterAssetID)
+				err = s.InsertOrUpdateOrderbookStats(ctx, &dbOS, []string{"base_asset_id", "counter_asset_id"})
+				if err != nil {
+					l.Error(errors.Wrap(err, "could not insert orderbook stats into db"))
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 func orderbookStatsToDBOrderbookStats(os scraper.OrderbookStats, bID, cID int32) tickerdb.OrderbookStats {
 	return tickerdb.OrderbookStats{
 		BaseAssetID:    bID,
