@@ -94,3 +94,91 @@ func dbMarketToMarketStats(m tickerdb.Market) MarketStats {
 		CloseTime:        closeTime,
 	}
 }
+
+// GenerateMarketSummaryFile generates a MarketSummary with the statistics for all
+// valid markets within the database and outputs it to <filename>.
+func GeneratePartialMarketSummaryFile(s *tickerdb.TickerSession, l *hlog.Entry, filename string, issuers []string) error {
+	l.Info("Generating partial market data...")
+	marketSummary, err := GeneratePartialMarketSummary(s, issuers)
+	if err != nil {
+		return err
+	}
+	l.Info("Market data successfully generated!")
+
+	jsonMkt, err := json.MarshalIndent(marketSummary, "", "    ")
+	if err != nil {
+		return err
+	}
+
+	l.Info("Writing market data to: ", filename)
+	numBytes, err := utils.WriteJSONToFile(jsonMkt, filename)
+	if err != nil {
+		return err
+	}
+	l.Infof("Wrote %d bytes to %s\n", numBytes, filename)
+	return nil
+}
+
+// GenerateMarketSummary outputs a MarketSummary with the statistics for all
+// valid markets within the database.
+func GeneratePartialMarketSummary(s *tickerdb.TickerSession, issuers []string) (ms PartialMarketSummary, err error) {
+	var marketStatsSlice []PartialMarketStats
+	now := time.Now()
+	nowMillis := utils.TimeToUnixEpoch(now)
+	nowRFC339 := utils.TimeToRFC3339(now)
+	ctx := context.Background()
+	var dbMarkets []tickerdb.PartialMarket
+
+	for _, issuer := range issuers {
+		dbPartialMarkets, err := s.RetrievePartialMarketsByIssuer(ctx, issuer, 24)
+		if err != nil {
+			return ms, err
+
+		}
+		dbMarkets = append(dbMarkets, dbPartialMarkets...)
+	}
+
+	for _, dbMarket := range dbMarkets {
+		marketStats := dbPartialMarketToMarketStats(dbMarket)
+		marketStatsSlice = append(marketStatsSlice, marketStats)
+	}
+
+	ms = PartialMarketSummary{
+		GeneratedAt:        nowMillis,
+		GeneratedAtRFC3339: nowRFC339,
+		Pairs:              marketStatsSlice,
+	}
+	return
+}
+
+func dbPartialMarketToMarketStats(m tickerdb.PartialMarket) PartialMarketStats {
+
+	spread, spreadMidPoint := utils.CalcSpread(m.HighestBid, m.LowestAsk)
+	return PartialMarketStats{
+		TradePairName:      m.TradePairName,
+		BaseAssetID:        m.BaseAssetID,
+		BaseAssetCode:      m.BaseAssetCode,
+		BaseAssetIssuer:    m.BaseAssetIssuer,
+		BaseAssetType:      m.BaseAssetType,
+		CounterAssetID:     m.CounterAssetID,
+		CounterAssetCode:   m.CounterAssetCode,
+		CounterAssetIssuer: m.CounterAssetIssuer,
+		CounterAssetType:   m.CounterAssetType,
+		BaseVolume:         m.BaseVolume,
+		CounterVolume:      m.CounterVolume,
+		TradeCount:         m.TradeCount,
+		Open:               m.Open,
+		Low:                m.Low,
+		High:               m.High,
+		Change:             m.Change,
+		Close:              m.Close,
+		NumBids:            m.NumBids,
+		BidVolume:          m.BidVolume,
+		HighestBid:         m.HighestBid,
+		NumAsks:            m.NumAsks,
+		AskVolume:          m.AskVolume,
+		LowestAsk:          m.LowestAsk,
+		Spread:             spread,
+		SpreadMidPoint:     spreadMidPoint,
+	}
+}

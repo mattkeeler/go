@@ -1,19 +1,17 @@
 #!/usr/bin/env bash
 set -e
 
-
 export STELLAR_HOME="/opt/stellar"
 export STELLAR_BIN="$STELLAR_HOME/bin"
 export CONF_HOME="$STELLAR_HOME/conf"
 export WWW_HOME="$STELLAR_HOME/www"
 
 export PGHOME="$STELLAR_HOME/postgresql"
-export PGBIN="/usr/lib/postgresql/9.5/bin"
+export PGBIN="/usr/lib/postgresql/13/bin"
 export PGDATA="$PGHOME/data"
 export PGUSER="stellar"
 export PGDB="ticker"
 export PGURL="postgres://127.0.0.1:5432/$PGDB"
-
 
 function main() {
 	echo ""
@@ -26,16 +24,17 @@ function main() {
 	start_postgres
 	migrate_db
 
-	populate_assets
+	populate_filtered_assets
+	#populate_filtered_trades
 	populate_trades
-	populate_orderbooks
+	populate_filtered_orderbooks
 	generate_assets_file
 	generate_markets_file
+	generate_partial_markets_file
 
 	stop_postgres
 	exec_supervisor
 }
-
 
 function migrate_db() {
 	echo ""
@@ -43,7 +42,6 @@ function migrate_db() {
 	echo ""
 	sudo -E -u stellar $STELLAR_BIN/ticker migrate
 }
-
 
 function populate_assets() {
 	if [ -f $PGHOME/.assets-populated ]; then
@@ -57,6 +55,19 @@ function populate_assets() {
 	touch $PGHOME/.assets-populated
 }
 
+function populate_filtered_assets() {
+	if [ -f $PGHOME/.assets-populated ]; then
+		echo "ticker: assets already pre-populated"
+		return 0
+	fi
+	echo ""
+	echo "Populating database from filtered assets"
+	echo ""
+	sudo -E -u stellar $STELLAR_BIN/ticker ingest filtered-assets -f $CONF_HOME/issuers.txt
+	touch $PGHOME/.assets-populated
+	echo ""
+	echo "Finished populating database from filtered assets"
+}
 
 function populate_trades() {
 	if [ -f $PGHOME/.trades-populated ]; then
@@ -70,6 +81,17 @@ function populate_trades() {
 	touch $PGHOME/.trades-populated
 }
 
+function populate_filtered_trades() {
+	if [ -f $PGHOME/.trades-populated ]; then
+		echo "ticker: trades already pre-populated"
+		return 0
+	fi
+	echo ""
+	echo "Populating initial trade database from filtered issuers"
+	echo ""
+	sudo -E -u stellar $STELLAR_BIN/ticker ingest filtered-trades -f $CONF_HOME/issuers.txt
+	touch $PGHOME/.trades-populated
+}
 
 function populate_orderbooks() {
 	if [ -f $PGHOME/.orderbooks-populated ]; then
@@ -83,6 +105,17 @@ function populate_orderbooks() {
 	touch $PGHOME/.orderbooks-populated
 }
 
+function populate_filtered_orderbooks() {
+	if [ -f $PGHOME/.orderbooks-populated ]; then
+		echo "ticker: orderbooks already pre-populated"
+		return 0
+	fi
+	echo ""
+	echo "Populating initial orderbook database from filtered issuers"
+	echo ""
+	sudo -E -u stellar $STELLAR_BIN/ticker ingest filtered-orderbooks -f $CONF_HOME/issuers.txt
+	touch $PGHOME/.orderbooks-populated
+}
 
 function generate_assets_file() {
 	if [ -f $STELLAR_HOME/www/assets.json ]; then
@@ -95,7 +128,6 @@ function generate_assets_file() {
 	sudo -E -u stellar $STELLAR_BIN/ticker generate asset-data -o $WWW_HOME/assets.json
 }
 
-
 function generate_markets_file() {
 	if [ -f $STELLAR_HOME/www/markets.json ]; then
 		echo "ticker: markets.json already pre-populated"
@@ -107,6 +139,16 @@ function generate_markets_file() {
 	sudo -E -u stellar $STELLAR_BIN/ticker generate market-data -o $WWW_HOME/markets.json
 }
 
+function generate_partial_markets_file() {
+	if [ -f $STELLAR_HOME/www/partial-markets.json ]; then
+		echo "ticker: partial-markets.json already pre-populated"
+		return 0
+	fi
+	echo ""
+	echo "Creating partial-markets.json file"
+	echo ""
+	sudo -E -u stellar $STELLAR_BIN/ticker generate partial-market-data -f $CONF_HOME/issuers.txt -o $WWW_HOME/partial-markets.json
+}
 
 # run_silent is a utility function that runs a command with an abbreviated
 # output provided it succeeds.
@@ -121,12 +163,12 @@ function run_silent() {
 	echo -n "$LABEL: "
 	set +e
 
-	$COMMAND $ARGS &> $OUTFILE
+	$COMMAND $ARGS &>$OUTFILE
 
 	if [ $? -eq 0 ]; then
-    echo "ok"
+		echo "ok"
 	else
-	  echo "failed!"
+		echo "failed!"
 		echo ""
 		cat $OUTFILE
 		exit 1
@@ -135,12 +177,13 @@ function run_silent() {
 	set -e
 }
 
-
 function set_db_url() {
 	PGPASS="stellar"
 	export DB_URL="postgres://stellar:${PGPASS}@127.0.0.1:5432/ticker"
 	echo "Setting db url: $DB_URL"
-	echo DB_URL="${DB_URL}" >> /etc/environment
+	#echo DB_URL="${DB_URL}" >>/etc/environment
+	export DB_URL="${DB_URL}"
+	echo DB_URL="${DB_URL}" >>~/.bashrc
 }
 
 function copy_pgpass() {
@@ -148,7 +191,6 @@ function copy_pgpass() {
 	chmod 0600 /home/stellar/.pgpass
 	chown stellar:stellar /home/stellar/.pgpass
 }
-
 
 function init_db() {
 	if [ -f $PGHOME/.quickstart-initialized ]; then
@@ -182,23 +224,21 @@ function init_db() {
 	popd
 }
 
-
 function start_postgres() {
 	if [ ! -z "$CURRENT_POSTGRES_PID" ]; then
 		return 0
 	fi
 
-	sudo -u postgres $PGBIN/postgres -D $PGDATA -c config_file=$CONF_HOME/postgresql.conf &> /dev/null &
+	sudo -u postgres $PGBIN/postgres -D $PGDATA -c config_file=$CONF_HOME/postgresql.conf &>/dev/null &
 	CURRENT_POSTGRES_PID=$!
 
-	while ! sudo -u postgres psql -c 'select 1' &> /dev/null ; do
-	  echo "Waiting for postgres to be available..."
-	  sleep 1
+	while ! sudo -u postgres psql -c 'select 1' &>/dev/null; do
+		echo "Waiting for postgres to be available..."
+		sleep 1
 	done
 
 	echo "postgres: up"
 }
-
 
 function stop_postgres() {
 	if [ -z "$CURRENT_POSTGRES_PID" ]; then
@@ -207,27 +247,23 @@ function stop_postgres() {
 
 	killall postgres
 	# wait for postgres to die
-	while kill -0 "$CURRENT_POSTGRES_PID" &> /dev/null; do
+	while kill -0 "$CURRENT_POSTGRES_PID" &>/dev/null; do
 		sleep 0.5
 	done
 	echo "postgres: down"
 }
-
 
 function exec_supervisor() {
 	echo "starting supervisor"
 	exec supervisord -n -c $CONF_HOME/supervisord.conf
 }
 
-
-pushd () {
-    command pushd "$@" > /dev/null
+pushd() {
+	command pushd "$@" >/dev/null
 }
 
-
-popd () {
-    command popd "$@" > /dev/null
+popd() {
+	command popd "$@" >/dev/null
 }
-
 
 main $@

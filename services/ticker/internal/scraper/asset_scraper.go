@@ -2,7 +2,7 @@ package scraper
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"math"
 	"net/http"
 	"net/url"
@@ -87,7 +87,7 @@ func fetchTOMLData(tomlURL string) (data string, err error) {
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return
 	}
@@ -226,9 +226,9 @@ func processAsset(logger *hlog.Entry, asset hProtocol.AssetStat, tomlCache *TOML
 		var ok bool
 		issuer, ok = tomlCache.Get(tomlURL)
 		if ok {
-			logger.Info("Using cached TOML for asset")
+			logger.Debug("Using cached TOML for asset")
 		} else {
-			logger.Info("Fetching TOML for asset")
+			logger.Debug("Fetching TOML for asset")
 			tomlData, err := fetchTOMLData(tomlURL)
 			if err != nil {
 				errors = append(errors, err)
@@ -287,7 +287,7 @@ func (c *ScraperConfig) parallelProcessAssets(assets []hProtocol.AssetStat, para
 					WithField("asset_code", assets[j].Asset.Code).
 					WithField("asset_issuer", assets[j].Asset.Issuer)
 				if !shouldDiscardAsset(assets[j], shouldValidateTOML) {
-					c.Logger.Info("Processing asset")
+					c.Logger.Debug("Processing asset")
 					finalAsset, err := processAsset(logger, assets[j], tomlCache, shouldValidateTOML)
 					if err != nil {
 						mutex.Lock()
@@ -297,7 +297,7 @@ func (c *ScraperConfig) parallelProcessAssets(assets []hProtocol.AssetStat, para
 					}
 					assetQueue <- finalAsset
 				} else {
-					c.Logger.Info("Discarding asset")
+					c.Logger.Debug("Discarding asset")
 					mutex.Lock()
 					numTrash++
 					mutex.Unlock()
@@ -354,6 +354,53 @@ func (c *ScraperConfig) retrieveAssets(limit int) (assets []hProtocol.AssetStat,
 		c.Logger.Debug("Cursor currently at:", n)
 
 		r = horizonclient.AssetRequest{Limit: 200, Cursor: n}
+	}
+
+	c.Logger.Infof("Fetched: %d assets\n", len(assets))
+	return
+}
+
+// retrieveFilteredAssets retrieves assets filtered by issuer from the Horizon API.
+func (c *ScraperConfig) retrieveFilteredAssets(limit int, issuer ...string) (assets []hProtocol.AssetStat, err error) {
+	r := horizonclient.AssetRequest{Limit: 200, ForAssetIssuer: issuer[0]}
+
+	assetsPage, err := c.Client.Assets(r)
+	if err != nil {
+		return
+	}
+
+	c.Logger.Info("Fetching assets from Horizon")
+
+	for assetsPage.Links.Next.Href != assetsPage.Links.Self.Href {
+		err = utils.Retry(5, 5*time.Second, c.Logger, func() error {
+			assetsPage, err = c.Client.Assets(r)
+			if err != nil {
+				c.Logger.Info("Horizon rate limit reached!")
+			}
+			return err
+		})
+		if err != nil {
+			return
+		}
+		assets = append(assets, assetsPage.Embedded.Records...)
+
+		if limit != 0 { // for performance reasons, only perform these additional checks when limit != 0
+			numAssets := len(assets)
+			if numAssets >= limit {
+				diff := numAssets - limit
+				assets = assets[0 : numAssets-diff]
+				break
+			}
+		}
+
+		nextURL := assetsPage.Links.Next.Href
+		n, err := nextCursor(nextURL)
+		if err != nil {
+			return assets, err
+		}
+		c.Logger.Debug("Cursor currently at:", n)
+
+		r = horizonclient.AssetRequest{Limit: 200, Cursor: n, ForAssetIssuer: issuer[0]}
 	}
 
 	c.Logger.Infof("Fetched: %d assets\n", len(assets))

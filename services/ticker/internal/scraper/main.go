@@ -128,12 +128,44 @@ func (c *ScraperConfig) ProcessAllAssets(limit int, parallelism int, assetQueue 
 	return
 }
 
+// ProcessAssets fetches specified assets from the Horizon public net.
+func (c *ScraperConfig) ProcessAssets(limit int, issuer string, parallelism int, assetQueue chan<- FinalAsset) (numNonTrash int, numTrash int) {
+	dirtyAssets, err := c.retrieveFilteredAssets(limit, issuer)
+	if err != nil {
+		return
+	}
+
+	numNonTrash, numTrash = c.parallelProcessAssets(dirtyAssets, parallelism, assetQueue)
+
+	c.Logger.Infof(
+		"Scanned %d entries. Trash: %d. Non-trash: %d\n",
+		len(dirtyAssets),
+		numTrash,
+		numNonTrash,
+	)
+	return
+}
+
 // FetchAllTrades fetches all trades for a given period, respecting the limit. If limit = 0,
 // will fetch all trades for that given period.
 func (c *ScraperConfig) FetchAllTrades(since time.Time, limit int) (trades []hProtocol.Trade, err error) {
 	c.Logger.Info("Fetching trades from Horizon")
 
 	trades, err = c.retrieveTrades(since, limit)
+
+	if len(trades) > 0 {
+		c.Logger.Info("Last close time ingested:", trades[len(trades)-1].LedgerCloseTime)
+	}
+	c.Logger.Infof("Fetched: %d trades\n", len(trades))
+	return
+}
+
+// FetchFilteredTrades fetches all trades filtered by issuer for a given period, respecting the limit. If limit = 0,
+// will fetch all trades for that given period.
+func (c *ScraperConfig) FetchFilteredTrades(since time.Time, limit int, issuer string) (trades []hProtocol.Trade, err error) {
+	c.Logger.Infof("Fetching trades from Horizon for issuer: %s", issuer)
+
+	trades, err = c.retrieveFilteredTrades(since, limit, issuer)
 
 	if len(trades) > 0 {
 		c.Logger.Info("Last close time ingested:", trades[len(trades)-1].LedgerCloseTime)

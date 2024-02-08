@@ -1,21 +1,33 @@
 FROM golang:1.19.1 as build
+RUN apt-get update && apt-get install -y \
+	curl \
+	git \
+	libpq-dev \
+	postgresql \
+	postgresql-client \
+	postgresql-contrib \
+	sudo \
+	vim \
+	supervisor \
+	nginx \
+	cron
 
-LABEL maintainer="Alex Cordeiro <alexc@stellar.org>"
+RUN addgroup --system stellar && adduser --system -uid 10011001 stellar
+RUN mkdir -p /opt/stellar/bin /opt/stellar/www /opt/stellar/postgresql/data
+WORKDIR /home/stellar
+COPY --chown=stellar:stellar . .
+
+WORKDIR ./services/ticker/docker/
+RUN cp -r conf /opt/stellar/conf
+RUN crontab -u stellar /opt/stellar/conf/crontab.txt
+RUN chmod +x start
+WORKDIR /home/stellar/services/ticker
+RUN cp issuers.txt /opt/stellar/conf
+RUN go build -buildvcs=false -o /opt/stellar/bin/ticker .
+
+RUN chown -R stellar:stellar /opt/stellar
 
 EXPOSE 5432
 EXPOSE 8000
 
-ADD . /src/ticker
-WORKDIR /src/ticker
-RUN go build -o /opt/stellar/bin/ticker ./services/ticker/
-
-WORKDIR /src/ticker/services/ticker/docker/
-RUN ["chmod", "+x", "./dependencies"]
-RUN ["./dependencies"]
-RUN ["chmod", "+x", "setup"]
-RUN ["./setup"]
-RUN ["cp", "-r", "conf", "/opt/stellar/conf"]
-RUN ["crontab", "-u", "stellar", "/opt/stellar/conf/crontab.txt"]
-RUN ["chmod", "+x", "start"]
-
-ENTRYPOINT ["/src/ticker/services/ticker/docker/start"]
+ENTRYPOINT ["./docker/start"]

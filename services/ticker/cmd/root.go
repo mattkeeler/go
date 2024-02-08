@@ -14,6 +14,7 @@ var DatabaseURL string
 var Client *horizonclient.Client
 var UseTestNet bool
 var Logger = hlog.New()
+var filePath string
 
 var defaultDatabaseURL = getEnv("DB_URL", "postgres://localhost:5432/stellarticker01?sslmode=disable")
 
@@ -47,7 +48,7 @@ func init() {
 		"use the Stellar Test Network, instead of the Stellar Public Network",
 	)
 
-	Logger.SetLevel(logrus.DebugLevel)
+	Logger.SetLevel(logrus.InfoLevel)
 }
 
 func initConfig() {

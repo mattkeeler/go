@@ -56,7 +56,7 @@ type reserves []string
 const (
 	// OrderAsc represents an ascending order parameter
 	OrderAsc Order = "asc"
-	// OrderDesc represents an descending order parameter
+	// OrderDesc represents a descending order parameter
 	OrderDesc Order = "desc"
 	// AssetType4 represents an asset type that is 4 characters long
 	AssetType4 AssetType = "credit_alphanum4"

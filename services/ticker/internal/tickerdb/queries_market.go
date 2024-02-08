@@ -93,6 +93,37 @@ func (s *TickerSession) RetrievePartialMarkets(ctx context.Context,
 	return
 }
 
+// RetrievePartialMarkets retrieves data in the PartialMarket format from the database.
+// It optionally filters the data according to the provided base and counter asset params
+// provided, as well as the numHoursAgo time offset.
+func (s *TickerSession) RetrievePartialMarketsByIssuer(ctx context.Context,
+	baseAssetIssuer string,
+	numHoursAgo int,
+) (partialMkts []PartialMarket, err error) {
+	sqlTrue := new(string)
+	*sqlTrue = "TRUE"
+
+	where, args := generateWhereClause([]optionalVar{
+		{"bAsset.is_valid", sqlTrue},
+		{"cAsset.is_valid", sqlTrue},
+		{"bAsset.issuer_account", &baseAssetIssuer},
+	})
+	where += fmt.Sprintf(
+		" AND t.ledger_close_time > now() - interval '%d hours'",
+		numHoursAgo,
+	)
+
+	q := strings.Replace(partialMarketQuery, "__WHERECLAUSE__", where, -1)
+	q = strings.Replace(q, "__NUMHOURS__", fmt.Sprintf("%d", numHoursAgo), -1)
+
+	argsInterface := make([]interface{}, len(args))
+	for i, v := range args {
+		argsInterface[i] = v
+	}
+	err = s.SelectRaw(ctx, &partialMkts, q, argsInterface...)
+	return
+}
+
 // Retrieve7DRelevantMarkets retrieves the base and counter asset data of the markets
 // that were relevant in the last 7-day period.
 func (s *TickerSession) Retrieve7DRelevantMarkets(ctx context.Context) (partialMkts []PartialMarket, err error) {

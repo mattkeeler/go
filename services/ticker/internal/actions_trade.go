@@ -105,6 +105,55 @@ func BackfillTrades(
 	return nil
 }
 
+// BackfillFilteredTrades ingest the most recent trades (limited to numDays) directly from Horizon
+// into the database, filtered by issuer.
+func BackfillFilteredTrades(
+	ctx context.Context,
+	s *tickerdb.TickerSession,
+	c *horizonclient.Client,
+	l *hlog.Entry,
+	numHours int,
+	limit int,
+	issuer string,
+) error {
+	sc := scraper.ScraperConfig{
+		Client: c,
+		Logger: l,
+	}
+	now := time.Now()
+	since := now.Add(time.Hour * -time.Duration(numHours))
+	trades, err := sc.FetchFilteredTrades(since, limit, issuer)
+	if err != nil {
+		return err
+	}
+
+	var dbTrades []tickerdb.Trade
+
+	for _, trade := range trades {
+		var bID, cID int32
+		bID, cID, err = findBaseAndCounter(ctx, s, trade)
+		if err != nil {
+			continue
+		}
+
+		var dbTrade tickerdb.Trade
+		dbTrade, err = hProtocolTradeToDBTrade(trade, bID, cID)
+		if err != nil {
+			l.Error("Could not convert entry to DB Trade: ", err)
+			continue
+		}
+		dbTrades = append(dbTrades, dbTrade)
+	}
+
+	l.Infof("Inserting %d entries in the database.\n", len(dbTrades))
+	err = s.BulkInsertTrades(ctx, dbTrades)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	return nil
+}
+
 // findBaseAndCounter tries to find the Base and Counter assets IDs in the database,
 // and returns an error if it doesn't find any.
 func findBaseAndCounter(ctx context.Context, s *tickerdb.TickerSession, trade hProtocol.Trade) (bID int32, cID int32, err error) {
