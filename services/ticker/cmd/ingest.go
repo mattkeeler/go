@@ -33,7 +33,7 @@ func init() {
 	cmdIngestTrades.Flags().IntVar(
 		&BackfillHours,
 		"num-hours",
-		1*24,
+		7*24,
 		"Number of past hours to backfill trade data",
 	)
 
